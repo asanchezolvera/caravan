@@ -8,7 +8,7 @@ Caravan is a headless ecommerce platform built with [Go](https://golang.org/) us
 
 This repository is officially supported on the most recent version of Go.
 
-It depends on a number of [external dependencies] (./go.mod), and uses Go [Modules] (https://github.com/golang/go/wiki/Modules) to manage them. Running any `go` command will automatically download and install the dependencies required for that operation.
+It depends on a number of [external dependencies](./go.mod), and uses Go [Modules](https://github.com/golang/go/wiki/Modules) to manage them. Running any `go` command will automatically download and install the dependencies required for that operation.
 
 ## Contributions
 
