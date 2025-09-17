@@ -4,23 +4,29 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"golang.org/x/crypto/argon2"
-)
+	"github.com/joho/godotenv"
 
-// User represents the data for a new user registration.
-type User struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
-}
+	"caravan/internal/auth"
+)
 
 var db *pgxpool.Pool
 
 func initDB() {
 	var err error
-	connStr := "postgresql://asanchezolvera:nKE0wa8Lowb676hKTF@localhost:5432/dev_db"
+	connStr := fmt.Sprintf(
+		"postgres://%s:%s:@%s:%s/%s",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_HOST"),
+		os.Getenv("DB_PORT"),
+		os.Getenv("DB_NAME"),
+	)
+
 	db, err = pgxpool.New(context.Background(), connStr)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -34,42 +40,27 @@ func initDB() {
 }
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Unable to connect to database: %v", err)
+	}
+
 	initDB()
 	defer db.Close()
 
 	app := fiber.New()
+	repo := auth.NewRepository(db)
+	service := auth.NewService(repo)
 
-	// Endpoint for user registration.
-	app.Post("/register", func(c *fiber.Ctx) error {
-		// Parse the request body into a User struct.
-		user := new(User)
-		if err := c.BodyParser(user); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Cannot parse JSON",
-			})
-		}
+	app.Post("/register", auth.RegisterUser(service))
+	app.Post("/login", auth.LoginUser(service))
 
-		// Hash the password using argon2.
-		hash := argon2.IDKey([]byte(user.Password), []byte("A_RANDOM_SALT"), 1, 64*1024, 4, 32)
-		hashedPassword := fmt.Sprintf("%x", hash)
+	app.Use(jwtware.New(jwtware.Config{
+		SigningKey: jwtware.SigningKey{
+			Key: auth.JwtSecret,
+		},
+	}))
 
-		// Insert the user into the database.
-		_, err := db.Exec(context.Background(), "INSERT INTO users (email, password_hash) VALUES ($1, $2)", user.Email, string(hashedPassword))
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Could not create user",
-			})
-		}
-
-		return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-			"message": "User registered successfully",
-		})
-	})
-
-	// Endpoint for user login.
-	app.Post("/login", func(c *fiber.Ctx) error {
-		return c.SendString("User login endpoint")
-	})
+	app.Get("/profile", auth.GetUserProfile)
 
 	log.Fatal(app.Listen(":3000"))
 }
