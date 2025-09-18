@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"os"
@@ -9,43 +8,52 @@ import (
 	handlers "caravan/internal/products"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
 
-	_ "caravan/internal/models"
+	"caravan/internal/models"
 )
 
-var db *pgxpool.Pool
+var db *gorm.DB
 
 func initDB() {
 	var err error
-	connStr := fmt.Sprintf(
-		"postgres://%s:%s:@%s:%s/%s",
-		os.Getenv("DB_USER"),
-		os.Getenv("DB_PASSWORD"),
-		os.Getenv("DB_HOST"),
-		os.Getenv("DB_PORT"),
-		os.Getenv("DB_NAME"),
-	)
 
-	db, err = pgxpool.New(context.Background(), connStr)
+	if err := godotenv.Load("../../.env"); err != nil {
+		log.Fatalf("Unable to load environment variables: %v", err)
+	}
+
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = fmt.Sprintf(
+			"postgres://%s:%s:@%s:%s/%s",
+			os.Getenv("DB_USER"),
+			os.Getenv("DB_PASSWORD"),
+			os.Getenv("DB_HOST"),
+			os.Getenv("DB_PORT"),
+			os.Getenv("DB_NAME"),
+		)
+	}
+
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	err = db.Ping(context.Background())
-	if err != nil {
-		log.Fatalf("Database not reachable: %v", err)
-	}
 	log.Println("Successfully connected to database!")
+
+	err = db.AutoMigrate(&models.Product{})
+	if err != nil {
+		log.Fatalf("Failed to migrate database: %v", err)
+	}
+
+	log.Println("Successfully migrated database!")
 }
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Unable to connect to database: %v", err)
-	}
+
 	initDB()
-	defer db.Close()
 
 	app := fiber.New()
 

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -21,29 +20,39 @@ func NewService(repo *Repository) *Service {
 	}
 }
 
-func (s *Service) RegisterUser(ctx context.Context, user *models.User) error {
+// RegisterUser handles user registration, including password hashing via Argon2.
+func (s *Service) RegisterUser(user *models.User) error {
+
+	// Hash user password using Argon2.
 	hash := argon2.IDKey([]byte(user.Password), []byte("salt"), 1, 64*1024, 4, 32)
+
 	user.Password = fmt.Sprintf("%x", hash)
 
-	if err := s.repo.CreateUser(ctx, user); err != nil {
+	// Create new user in the database.
+	if err := s.repo.CreateUser(user); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (s *Service) LoginUser(ctx context.Context, user *models.User) (string, error) {
-	foundUser, err := s.repo.GetUserByEmail(ctx, user.Email)
-	if err != nil {
+// LoginUser authenticates a user and generates a JWT token upon success.
+func (s *Service) LoginUser(user *models.User) (string, error) {
+
+	// Retrieve user from the database by email.
+	foundUser, err := s.repo.GetUserByEmail(user.Email)
+	if err != nil || foundUser == nil {
 		return "", fmt.Errorf("Invalid credentials")
 	}
 
+	// Verify user password against the stored hash.
 	hash := argon2.IDKey([]byte(user.Password), []byte("salt"), 1, 64*1024, 4, 32)
 	providedHash := fmt.Sprintf("%x", hash)
 	if providedHash != foundUser.Password {
 		return "", fmt.Errorf("Invalid credentials")
 	}
 
+	// Generate JWT token for the authenticated user.
 	expirationTime := time.Now().Add(time.Hour * 24)
 	claims := &models.Claims{
 		Email: foundUser.Email,
@@ -59,4 +68,13 @@ func (s *Service) LoginUser(ctx context.Context, user *models.User) (string, err
 	}
 
 	return tokenString, nil
+}
+
+// GetUserProfile retrieves user profile information based on email.
+func (s *Service) GetUserProfile(email string) (*models.User, error) {
+	user, err := s.repo.GetUserByEmail(email)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to retrieve user profile: %w", err)
+	}
+	return user, nil
 }

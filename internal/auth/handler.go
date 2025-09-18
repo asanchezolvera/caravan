@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"fmt"
-
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v4"
 
@@ -20,7 +18,7 @@ func RegisterUser(svc *Service) fiber.Handler {
 				"error": "Cannot parse JSON",
 			})
 		}
-		if err := svc.RegisterUser(c.Context(), user); err != nil {
+		if err := svc.RegisterUser(user); err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error": "Failed to register user",
 			})
@@ -42,7 +40,7 @@ func LoginUser(svc *Service) fiber.Handler {
 			})
 		}
 
-		token, err := svc.LoginUser(c.Context(), user)
+		token, err := svc.LoginUser(user)
 		if err != nil {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid email or password",
@@ -56,12 +54,20 @@ func LoginUser(svc *Service) fiber.Handler {
 }
 
 // GetUserProfile handles the protected user profile route.
-func GetUserProfile(c *fiber.Ctx) error {
-	user := c.Locals("user").(*jwt.Token)
-	claims := user.Claims.(*jwt.MapClaims)
-	email := (*claims)["email"].(string)
+func GetUserProfile(svc *Service) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		userToken := c.Locals("user").(*jwt.Token)
+		claims := userToken.Claims.(*jwt.MapClaims)
+		email := (*claims)["email"].(string)
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": fmt.Sprintf("Welcome, %s! You are authorized.", email),
-	})
+		// Call GetUserProfile service to get user data.
+		user, err := svc.GetUserProfile(email)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to retrieve user profile",
+			})
+		}
+
+		return c.Status(fiber.StatusOK).JSON(user)
+	}
 }
